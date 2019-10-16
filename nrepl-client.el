@@ -538,7 +538,7 @@ If NO-ERROR is non-nil, show messages instead of throwing an error."
   (let* ((remote-dir (if host (format "/ssh:%s:" host) default-directory))
          (ssh (or (executable-find "ssh")
                   (error "[nREPL] Cannot locate 'ssh' executable")))
-         (cmd (nrepl--ssh-tunnel-command ssh remote-dir port))
+         (cmd (nrepl--ssh-tunnel-command (nrepl--windows-escape ssh) remote-dir port))
          (tunnel-buf (nrepl-tunnel-buffer-name
                       `((:host ,host) (:port ,port))))
          (tunnel (start-process-shell-command "nrepl-tunnel" tunnel-buf cmd)))
@@ -555,18 +555,24 @@ If NO-ERROR is non-nil, show messages instead of throwing an error."
           (plist-put :tunnel tunnel)
           (plist-put :remote-host host))))))
 
+(defun nrepl--windows-escape (cmd)
+  "Escape CMD on Windows since they have spaces sometimes :-(."
+  (concat "\"" cmd "\""))
+
 (defun nrepl--ssh-tunnel-command (ssh dir port)
   "Command string to open SSH tunnel to the host associated with DIR's PORT."
-  (with-parsed-tramp-file-name dir v
-    ;; this abuses the -v option for ssh to get output when the port
-    ;; forwarding is set up, which is used to synchronise on, so that
-    ;; the port forwarding is up when we try to connect.
-    (format-spec
-     "%s -v -N -L %p:localhost:%p %u'%h'"
-     `((?s . ,ssh)
-       (?p . ,port)
-       (?h . ,v-host)
-       (?u . ,(if v-user (format "-l '%s' " v-user) ""))))))
+  (let ((cmd (with-parsed-tramp-file-name dir v
+                ;; this abuses the -v option for ssh to get output when the port
+                ;; forwarding is set up, which is used to synchronise on, so that
+                ;; the port forwarding is up when we try to connect.
+                (format-spec
+                 "%s -v -N -L %p:localhost:%p %u%h"
+                 `((?s . ,ssh)
+                   (?p . ,port)
+                   (?h . ,v-host)
+                   (?u . ,(if v-user (format "-l '%s' " v-user) "")))))))
+    (message "[nREPL DEBUG] built ssh tunnel command: %s" cmd)
+    cmd))
 
 (autoload 'comint-watch-for-password-prompt "comint"  "(autoload).")
 
